@@ -46,7 +46,12 @@ export function AdminBooks() {
     };
     if (editingId) {
       const { error } = await supabase.from('books').update(payload).eq('id', editingId);
-      if (error) { show('فشل التحديث', 'error'); return; }
+      if (error) { show('فشل التحديث', 'error');
+          show(
+    error.message || 'فشل تحديث الكتاب',
+    'error'
+  );
+        return; }
       show('تم تحديث الكتاب', 'success');
     } else {
       const { error } = await supabase.from('books').insert(payload);
@@ -58,7 +63,8 @@ export function AdminBooks() {
   };
 
   const handleEdit = (book: Book) => {
-    setForm({ ...book });
+    const { category, ...bookData } = book
+    setForm({ ...bookData });
     setEditingId(book.id);
     setShowForm(true);
   };
