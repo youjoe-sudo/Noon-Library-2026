@@ -7,13 +7,13 @@ import { useToast } from '@/lib/toast';
 import { useHashRoute } from '@/lib/router';
 import { supabase } from '@/lib/supabase';
 import { getStoredReferral, clearReferral } from '@/lib/referral';
-import type { Address, CouponValidationResult } from '@/lib/types';
+import type { Address, AffiliateCodeResult, DiscountCodeResult } from '@/lib/types';
 import {
   EGYPT_GOVERNORATES, SHIPPING_METHODS, PAYMENT_METHODS,
   getShippingCost, isFreeShipping, formatPrice, generateOrderNumber,
   PAYMENT_VODAFONE_NUMBER,
 } from '@/lib/constants';
-import { MapPin, CreditCard, Truck, Check, ArrowLeft, Tag, X } from 'lucide-react';
+import { MapPin, CreditCard, Truck, Check, Tag, X, UserCheck, Loader2 } from 'lucide-react';
 import { ReceiptUpload } from '@/components/ReceiptUpload';
 
 export function CheckoutPage() {
@@ -29,11 +29,18 @@ export function CheckoutPage() {
   const [useNewAddress, setUseNewAddress] = useState(false);
   const [shippingMethod, setShippingMethod] = useState<'express' | 'postal'>('express');
   const [paymentMethod, setPaymentMethod] = useState<'full'>('full');
-  const [promoCode, setPromoCode] = useState('');
-  const [couponResult, setCouponResult] = useState<CouponValidationResult | null>(null);
-  const [promoLoading, setPromoLoading] = useState(false);
   const [paymentInfo, setPaymentInfo] = useState({ sender_phone: '', receipt_number: '', screenshot_url: '' });
   const [submitting, setSubmitting] = useState(false);
+
+  // Affiliate code state
+  const [affiliateCode, setAffiliateCode] = useState('');
+  const [affiliateResult, setAffiliateResult] = useState<AffiliateCodeResult | null>(null);
+  const [affiliateLoading, setAffiliateLoading] = useState(false);
+
+  // Discount code state
+  const [discountCode, setDiscountCode] = useState('');
+  const [discountResult, setDiscountResult] = useState<DiscountCodeResult | null>(null);
+  const [discountLoading, setDiscountLoading] = useState(false);
 
   useEffect(() => {
     if (!profile) return;
@@ -45,6 +52,16 @@ export function CheckoutPage() {
     });
   }, [profile]);
 
+  // Pre-fill affiliate code from stored referral link
+  useEffect(() => {
+    const referral = getStoredReferral();
+    if (referral) {
+      setAffiliateCode(referral.referralCode);
+      // Auto-validate
+      validateAffiliateCode(referral.referralCode);
+    }
+  }, []);
+
   const subtotal = getCartSubtotal(items);
   const bookCount = getCartBookCount(items);
   const address = addresses.find((a) => a.id === selectedAddressId);
@@ -55,30 +72,50 @@ export function CheckoutPage() {
     return getShippingCost(governorate, shippingMethod, settings, bookCount);
   }, [governorate, shippingMethod, settings, bookCount, subtotal]);
 
-  const discountPercent = couponResult?.valid ? (couponResult.discount_percent ?? 0) : 0;
-  const discountAmount = discountPercent > 0 ? (subtotal * discountPercent / 100) : 0;
-  const total = subtotal + shippingCost - discountAmount;
+  // Calculate discounts independently
+  const affiliateDiscountAmount = affiliateResult?.valid
+    ? (subtotal * (affiliateResult.customer_discount_percent ?? 0)) / 100
+    : 0;
+  const discountCodeDiscountAmount = discountResult?.valid
+    ? (discountResult.discount_amount ?? 0)
+    : 0;
+  const totalDiscount = Math.min(affiliateDiscountAmount + discountCodeDiscountAmount, subtotal);
+  const total = subtotal + shippingCost - totalDiscount;
 
-  const applyPromo = async () => {
-    if (!promoCode.trim() || !profile) return;
-    setPromoLoading(true);
-    const { data, error } = await supabase.rpc('validate_coupon', {
-      p_code: promoCode.trim(),
+  const validateAffiliateCode = async (code: string) => {
+    if (!code.trim() || !profile) return;
+    setAffiliateLoading(true);
+    const { data, error } = await supabase.rpc('validate_affiliate_code', {
+      p_code: code.trim(),
       p_user_id: profile.id,
     });
     if (error) {
-      setCouponResult({ valid: false, error: 'فشل التحقق من الكود' });
-      show('فشل التحقق من الكود', 'error');
+      setAffiliateResult({ valid: false, error: 'فشل التحقق من كود المسوق' });
     } else {
-      const result = data as CouponValidationResult;
-      setCouponResult(result);
-      if (result.valid) {
-        show('تم تطبيق كود الخصم', 'success');
-      } else {
-        show(result.error ?? 'كود الخصم غير صالح', 'error');
-      }
+      setAffiliateResult(data as AffiliateCodeResult);
     }
-    setPromoLoading(false);
+    setAffiliateLoading(false);
+  };
+
+  const validateDiscountCode = async (code: string) => {
+    if (!code.trim() || !profile) return;
+    setDiscountLoading(true);
+    const bookIds = items.map((i) => i.book_id).filter(Boolean);
+    const { data: booksData } = await supabase.from('books').select('category_id').in('id', bookIds);
+    const categoryIds = (booksData ?? []).map((b: { category_id: string }) => b.category_id).filter(Boolean);
+    const { data, error } = await supabase.rpc('validate_discount_code', {
+      p_code: code.trim(),
+      p_user_id: profile.id,
+      p_subtotal: subtotal,
+      p_book_ids: bookIds,
+      p_category_ids: categoryIds,
+    });
+    if (error) {
+      setDiscountResult({ valid: false, error: 'فشل التحقق من كود الخصم' });
+    } else {
+      setDiscountResult(data as DiscountCodeResult);
+    }
+    setDiscountLoading(false);
   };
 
   const handleSubmit = async () => {
@@ -107,26 +144,24 @@ export function CheckoutPage() {
       }
     }
 
-    // Determine affiliate attribution (priority: coupon > referral)
-    const referral = getStoredReferral();
+    // Determine affiliate attribution
+    // Priority: affiliate code entered > stored referral link
+    const storedReferral = getStoredReferral();
     let referredAffiliateId: string | null = null;
-    let commissionSource: 'coupon' | 'referral' | 'none' = 'none';
-    let promoCodeId: string | null = null;
-    let promoCodeText: string | null = null;
+    let commissionSource: 'affiliate_code' | 'referral' | 'none' = 'none';
+    let affiliateCodeText: string | null = null;
 
-    if (couponResult?.valid && couponResult.affiliate_id) {
-      // Coupon has highest priority
-      referredAffiliateId = couponResult.affiliate_id;
-      commissionSource = 'coupon';
-      promoCodeId = couponResult.promo_id ?? null;
-      promoCodeText = couponResult.code ?? null;
-    } else if (referral) {
-      // Referral link as fallback
-      referredAffiliateId = referral.affiliateId;
+    if (affiliateResult?.valid && affiliateResult.affiliate_id) {
+      referredAffiliateId = affiliateResult.affiliate_id;
+      commissionSource = 'affiliate_code';
+      affiliateCodeText = affiliateResult.referral_code ?? null;
+    } else if (storedReferral) {
+      referredAffiliateId = storedReferral.affiliateId;
       commissionSource = 'referral';
+      affiliateCodeText = storedReferral.referralCode;
     }
 
-    // Self-referral prevention (double check on frontend, server enforces too)
+    // Self-referral prevention
     if (referredAffiliateId) {
       const { data: aff } = await supabase
         .from('affiliate_profiles')
@@ -136,12 +171,15 @@ export function CheckoutPage() {
       if (aff && (aff as { user_id: string }).user_id === profile.id) {
         referredAffiliateId = null;
         commissionSource = 'none';
-        promoCodeId = null;
-        promoCodeText = null;
-        show('لا يمكنك استخدام كود الخصم الخاص بك', 'error');
+        affiliateCodeText = null;
+        show('لا يمكنك استخدام كود المسوق الخاص بك', 'error');
         return;
       }
     }
+
+    // Discount code
+    const discountCodeId = discountResult?.valid ? discountResult.discount_code_id ?? null : null;
+    const discountCodeTextVal = discountResult?.valid ? discountResult.code ?? null : null;
 
     setSubmitting(true);
     try {
@@ -153,7 +191,7 @@ export function CheckoutPage() {
         subtotal,
         books_subtotal: subtotal,
         shipping_cost: shippingCost,
-        discount_amount: discountAmount,
+        discount_amount: totalDiscount,
         total,
         governorate: addr.governorate,
         shipping_method: shippingMethod,
@@ -161,10 +199,12 @@ export function CheckoutPage() {
         address_full_name: addr.full_name,
         address_phone: addr.phone,
         address_detail: [addr.city, addr.area, addr.address_detail].filter(Boolean).join('، ') || null,
-        promo_code_id: promoCodeId,
-        promo_code_text: promoCodeText,
         referred_affiliate_id: referredAffiliateId,
         commission_source: commissionSource,
+        affiliate_code: affiliateCodeText,
+        affiliate_discount_amount: affiliateDiscountAmount,
+        discount_code_id: discountCodeId,
+        discount_code_text: discountCodeTextVal,
         payment_sender_phone: paymentMethod === 'full' ? paymentInfo.sender_phone : null,
         payment_receipt_number: paymentMethod === 'full' ? paymentInfo.receipt_number : null,
         payment_screenshot_url: paymentMethod === 'full' ? paymentInfo.screenshot_url : null,
@@ -189,14 +229,19 @@ export function CheckoutPage() {
 
       await supabase.from('order_items').insert(orderItems);
 
-      // Increment coupon usage if applicable
-      if (promoCodeId) {
-        await supabase.rpc('track_coupon_usage', { p_promo_id: promoCodeId }).then(() => {});
-        // Fallback: direct update if RPC doesn't exist
-        await supabase.from('promo_codes').update({
-          used_count: (await supabase.from('promo_codes').select('used_count').eq('id', promoCodeId).maybeSingle()).data?.used_count + 1,
-          order_count: (await supabase.from('promo_codes').select('order_count').eq('id', promoCodeId).maybeSingle()).data?.order_count + 1,
-        }).eq('id', promoCodeId);
+      // Record discount code usage
+      if (discountCodeId) {
+        await supabase.from('discount_code_usages').insert({
+          discount_code_id: discountCodeId,
+          user_id: profile.id,
+          order_id: orderData.id,
+        });
+        // Update discount code stats
+        await supabase.rpc('increment_discount_code_usage', {
+          p_code_id: discountCodeId,
+          p_discount_amount: discountCodeDiscountAmount,
+          p_revenue: subtotal - totalDiscount,
+        });
       }
 
       // Log affiliate activity
@@ -205,14 +250,12 @@ export function CheckoutPage() {
           affiliate_id: referredAffiliateId,
           order_id: orderData.id,
           action: 'order_created',
-          details: { commission_source: commissionSource, coupon_code: promoCodeText },
+          details: { commission_source: commissionSource, affiliate_code: affiliateCodeText, discount_code: discountCodeTextVal },
         });
       }
 
-      // Clear referral after successful order
       clearReferral();
 
-      // Send notification to user
       await supabase.from('notifications').insert({
         user_id: profile.id,
         title: 'تم استلام طلبك',
@@ -220,7 +263,6 @@ export function CheckoutPage() {
         type: 'order',
       });
 
-      // Notify admins
       const { data: admins } = await supabase.from('profiles').select('id').eq('role', 'admin');
       if (admins) {
         await supabase.from('notifications').insert(admins.map((a) => ({
@@ -388,37 +430,96 @@ export function CheckoutPage() {
             </div>
           </section>
 
-          {/* Promo code */}
+          {/* Affiliate Code */}
           <section className="card p-6">
             <h2 className="mb-4 flex items-center gap-2 font-bold text-ink-900">
-              <Tag size={20} className="text-primary-600" /> كود الخصم
+              <UserCheck size={20} className="text-primary-600" /> كود المسوق
             </h2>
+            <p className="mb-3 text-xs text-ink-500">
+              أدخل كود المسوق لربط طلبك بالمسوق. لا يؤثر على سعر الطلب ما لم يكن المسوق يقدم خصماً للعميل.
+            </p>
             <div className="flex gap-2">
               <input
-                value={promoCode}
-                onChange={(e) => setPromoCode(e.target.value)}
+                value={affiliateCode}
+                onChange={(e) => { setAffiliateCode(e.target.value); setAffiliateResult(null); }}
                 className="input"
-                placeholder="أدخل كود الخصم"
+                placeholder="كود المسوق (اختياري)"
                 dir="ltr"
               />
-              <button onClick={applyPromo} disabled={promoLoading} className="btn-outline whitespace-nowrap">
-                {promoLoading ? '...' : 'تطبيق'}
+              <button
+                onClick={() => validateAffiliateCode(affiliateCode)}
+                disabled={affiliateLoading || !affiliateCode.trim()}
+                className="btn-outline whitespace-nowrap"
+              >
+                {affiliateLoading ? <Loader2 size={16} className="animate-spin" /> : 'تطبيق'}
               </button>
             </div>
-            {couponResult?.valid && (
-              <div className="mt-3 flex items-center gap-2 rounded-lg bg-primary-50 p-3 text-sm">
-                <Check size={16} className="text-primary-600" />
-                <span className="font-semibold text-primary-700">{couponResult.code}</span>
-                <span className="text-primary-600">خصم {couponResult.discount_percent}%</span>
-                <button onClick={() => { setCouponResult(null); setPromoCode(''); }} className="text-red-500 hover:underline">
+            {affiliateResult?.valid && (
+              <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-primary-50 p-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <Check size={16} className="text-primary-600" />
+                  <span className="font-semibold text-primary-700">{affiliateResult.referral_code}</span>
+                  {(affiliateResult.customer_discount_percent ?? 0) > 0 ? (
+                    <span className="text-primary-600">خصم {affiliateResult.customer_discount_percent}% للعميل</span>
+                  ) : (
+                    <span className="text-ink-500">بدون خصم للعميل</span>
+                  )}
+                </div>
+                <button onClick={() => { setAffiliateResult(null); setAffiliateCode(''); }} className="text-red-500 hover:underline">
                   <X size={14} />
                 </button>
               </div>
             )}
-            {couponResult && !couponResult.valid && (
+            {affiliateResult && !affiliateResult.valid && (
               <div className="mt-3 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-600">
-                <X size={16} />
-                {couponResult.error}
+                <X size={16} /> {affiliateResult.error}
+              </div>
+            )}
+          </section>
+
+          {/* Discount Code */}
+          <section className="card p-6">
+            <h2 className="mb-4 flex items-center gap-2 font-bold text-ink-900">
+              <Tag size={20} className="text-primary-600" /> كود الخصم
+            </h2>
+            <p className="mb-3 text-xs text-ink-500">
+              أدخل كود خصم مستقل من الإدارة للحصول على خصم على طلبك.
+            </p>
+            <div className="flex gap-2">
+              <input
+                value={discountCode}
+                onChange={(e) => { setDiscountCode(e.target.value); setDiscountResult(null); }}
+                className="input"
+                placeholder="كود الخصم (اختياري)"
+                dir="ltr"
+              />
+              <button
+                onClick={() => validateDiscountCode(discountCode)}
+                disabled={discountLoading || !discountCode.trim()}
+                className="btn-outline whitespace-nowrap"
+              >
+                {discountLoading ? <Loader2 size={16} className="animate-spin" /> : 'تطبيق'}
+              </button>
+            </div>
+            {discountResult?.valid && (
+              <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-primary-50 p-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <Check size={16} className="text-primary-600" />
+                  <span className="font-semibold text-primary-700">{discountResult.code}</span>
+                  <span className="text-primary-600">
+                    {discountResult.discount_type === 'percentage'
+                      ? `خصم ${discountResult.discount_value}%`
+                      : `خصم ${formatPrice(discountResult.discount_value ?? 0)}`}
+                  </span>
+                </div>
+                <button onClick={() => { setDiscountResult(null); setDiscountCode(''); }} className="text-red-500 hover:underline">
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+            {discountResult && !discountResult.valid && (
+              <div className="mt-3 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+                <X size={16} /> {discountResult.error}
               </div>
             )}
           </section>
@@ -448,10 +549,16 @@ export function CheckoutPage() {
               <span className="text-ink-500">الشحن</span>
               <span className="font-semibold">{shippingCost === 0 ? 'مجاني' : formatPrice(shippingCost)}</span>
             </div>
-            {discountAmount > 0 && (
+            {affiliateDiscountAmount > 0 && (
               <div className="flex justify-between text-primary-600">
-                <span>الخصم</span>
-                <span className="font-semibold">-{formatPrice(discountAmount)}</span>
+                <span>خصم المسوق</span>
+                <span className="font-semibold">-{formatPrice(affiliateDiscountAmount)}</span>
+              </div>
+            )}
+            {discountCodeDiscountAmount > 0 && (
+              <div className="flex justify-between text-primary-600">
+                <span>خصم كود الخصم</span>
+                <span className="font-semibold">-{formatPrice(discountCodeDiscountAmount)}</span>
               </div>
             )}
           </div>

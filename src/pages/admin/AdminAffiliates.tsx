@@ -12,6 +12,7 @@ import {
 import {
   Check, X, Wallet, Search, Ban, Trash2, UserCog, Shield,
   ShieldCheck, ShieldOff, UserPlus, UserMinus, Power, PowerOff,
+  Pencil, Save,
 } from 'lucide-react';
 
 export function AdminAffiliates() {
@@ -25,6 +26,8 @@ export function AdminAffiliates() {
   const [search, setSearch] = useState('');
   const [userSearch, setUserSearch] = useState('');
   const [tab, setTab] = useState<'affiliates' | 'withdrawals' | 'promos' | 'users'>('affiliates');
+  const [editingAffiliate, setEditingAffiliate] = useState<AffiliateProfile | null>(null);
+  const [editForm, setEditForm] = useState({ referral_code: '', commission_rate: '', customer_discount: '', status: '', notes: '' });
 
   const fetchAll = async () => {
     const [affs, wds, prs, usrs] = await Promise.all([
@@ -137,6 +140,33 @@ export function AdminAffiliates() {
     fetchAll();
   };
 
+  const handleEditAffiliate = (aff: AffiliateProfile) => {
+    setEditForm({
+      referral_code: aff.referral_code ?? '',
+      commission_rate: aff.custom_commission_rate != null ? String(aff.custom_commission_rate) : '',
+      customer_discount: String(aff.customer_discount_percent ?? 0),
+      status: aff.status,
+      notes: aff.admin_notes ?? '',
+    });
+    setEditingAffiliate(aff);
+  };
+
+  const handleSaveAffiliate = async () => {
+    if (!editingAffiliate) return;
+    const { error } = await supabase.rpc('update_affiliate_settings', {
+      p_affiliate_id: editingAffiliate.id,
+      p_referral_code: editForm.referral_code.trim() || null,
+      p_commission_rate: editForm.commission_rate ? Number(editForm.commission_rate) : null,
+      p_customer_discount: Number(editForm.customer_discount) || 0,
+      p_status: editForm.status || null,
+      p_notes: editForm.notes || null,
+    });
+    if (error) { show('فشل تحديث إعدادات المسوق', 'error'); return; }
+    show('تم تحديث إعدادات المسوق', 'success');
+    setEditingAffiliate(null);
+    fetchAll();
+  };
+
   const filteredAff = affiliates.filter((a) =>
     a.full_name.toLowerCase().includes(search.toLowerCase()) ||
     a.phone.includes(search)
@@ -230,6 +260,10 @@ export function AdminAffiliates() {
                     <button onClick={() => handleDemoteAffiliate(aff.user_id)} className="btn-ghost text-xs" title="إرجاع إلى مستخدم عادي">
                       <UserMinus size={14} /> إرجاع لمستخدم
                     </button>
+                    {/* Edit settings */}
+                    <button onClick={() => handleEditAffiliate(aff)} className="btn-outline text-xs" title="تعديل الإعدادات">
+                      <Pencil size={14} /> إعدادات
+                    </button>
                     {/* Permanent delete */}
                     <button onClick={() => handleDeleteAffiliate(aff.id)} className="btn-danger text-xs" title="حذف نهائي">
                       <Trash2 size={14} /> حذف
@@ -242,6 +276,53 @@ export function AdminAffiliates() {
               </div>
             ))
           )}
+        </div>
+      )}
+
+      {/* Affiliate settings edit modal */}
+      {editingAffiliate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="card max-w-lg p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="flex items-center gap-2 font-bold text-ink-900">
+                <UserCog size={20} /> إعدادات المسوق: {editingAffiliate.full_name}
+              </h3>
+              <button onClick={() => setEditingAffiliate(null)} className="text-ink-400 hover:text-ink-600"><X size={20} /></button>
+            </div>
+            <div className="grid gap-4">
+              <div>
+                <label className="label">كود المسوق</label>
+                <input value={editForm.referral_code} onChange={(e) => setEditForm({ ...editForm, referral_code: e.target.value })} className="input" dir="ltr" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">نسبة العمولة %</label>
+                  <input type="number" value={editForm.commission_rate} onChange={(e) => setEditForm({ ...editForm, commission_rate: e.target.value })} className="input" placeholder="10" />
+                </div>
+                <div>
+                  <label className="label">خصم العميل %</label>
+                  <input type="number" value={editForm.customer_discount} onChange={(e) => setEditForm({ ...editForm, customer_discount: e.target.value })} className="input" placeholder="0" />
+                </div>
+              </div>
+              <div>
+                <label className="label">الحالة</label>
+                <select value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })} className="input">
+                  <option value="active">نشط</option>
+                  <option value="disabled">متوقف</option>
+                  <option value="pending">قيد المراجعة</option>
+                  <option value="rejected">مرفوض</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">ملاحظات الإدارة</label>
+                <textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} className="input min-h-20" placeholder="ملاحظات داخلية للمسوق" />
+              </div>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button onClick={handleSaveAffiliate} className="btn-primary"><Save size={16} /> حفظ الإعدادات</button>
+              <button onClick={() => setEditingAffiliate(null)} className="btn-ghost">إلغاء</button>
+            </div>
+          </div>
         </div>
       )}
 

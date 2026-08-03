@@ -11,7 +11,9 @@ import { AdminNotifications } from './AdminNotifications';
 import { AdminTickets } from './AdminTickets';
 import { AdminSqlRls } from './AdminSqlRls';
 import { AdminCategories } from './AdminCategories';
-import { LayoutDashboard, BookOpen, Package, Megaphone, Settings, Bell, MessageSquare, Tags, Shield } from 'lucide-react';
+import { AdminDiscountCodes } from './AdminDiscountCodes';
+import { AdminDatabase } from './AdminDatabase';
+import { LayoutDashboard, BookOpen, Package, Megaphone, Settings, Bell, MessageSquare, Tags, Shield, Ticket, Database as DbIcon } from 'lucide-react';
 
 export function AdminPage() {
   const { profile } = useAuth();
@@ -40,10 +42,12 @@ export function AdminPage() {
     { id: 'categories', label: 'التصنيفات', icon: <Tags size={18} /> },
     { id: 'orders', label: 'الطلبات', icon: <Package size={18} /> },
     { id: 'affiliates', label: 'المسوقون', icon: <Megaphone size={18} /> },
+    { id: 'discount-codes', label: 'أكواد الخصم', icon: <Ticket size={18} /> },
     { id: 'tickets', label: 'التذاكر', icon: <MessageSquare size={18} /> },
     { id: 'notifications', label: 'الإشعارات', icon: <Bell size={18} /> },
     { id: 'settings', label: 'الإعدادات', icon: <Settings size={18} /> },
     { id: 'sql-rls', label: 'SQL RLS', icon: <Shield size={18} /> },
+    { id: 'database', label: 'قاعدة البيانات', icon: <DbIcon size={18} /> },
   ];
 
   return (
@@ -73,10 +77,12 @@ export function AdminPage() {
           {tab === 'categories' && <AdminCategories />}
           {tab === 'orders' && <AdminOrders />}
           {tab === 'affiliates' && <AdminAffiliates />}
+          {tab === 'discount-codes' && <AdminDiscountCodes />}
           {tab === 'tickets' && <AdminTickets />}
           {tab === 'notifications' && <AdminNotifications />}
           {tab === 'settings' && <AdminSettings />}
           {tab === 'sql-rls' && <AdminSqlRls />}
+          {tab === 'database' && <AdminDatabase />}
         </div>
       </div>
     </div>
