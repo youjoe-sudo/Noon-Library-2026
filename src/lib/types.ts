@@ -145,6 +145,8 @@ export interface AffiliateProfile {
   status: AffiliateStatus;
   reject_reason: string | null;
   custom_commission_rate: number | null;
+  customer_discount_percent: number;
+  admin_notes: string | null;
   referral_code: string | null;
   total_sales: number;
   total_earnings: number;
@@ -264,6 +266,58 @@ export interface CouponValidationResult {
   affiliate_id?: string;
   discount_percent?: number;
   code?: string;
+}
+
+export interface AffiliateCodeResult {
+  valid: boolean;
+  error?: string;
+  affiliate_id?: string;
+  referral_code?: string;
+  customer_discount_percent?: number;
+  commission_rate?: number;
+}
+
+export interface DiscountCodeResult {
+  valid: boolean;
+  error?: string;
+  discount_code_id?: string;
+  code?: string;
+  discount_type?: 'percentage' | 'fixed';
+  discount_value?: number;
+  discount_amount?: number;
+}
+
+export interface CombinedCodesResult {
+  affiliate: AffiliateCodeResult | null;
+  discount_code: DiscountCodeResult | null;
+  affiliate_id: string | null;
+  affiliate_code: string | null;
+  affiliate_discount_amount: number;
+  discount_code_id: string | null;
+  discount_code_text: string | null;
+  discount_code_discount_amount: number;
+  total_discount_amount: number;
+  final_total: number;
+}
+
+export interface DiscountCode {
+  id: string;
+  code: string;
+  discount_type: 'percentage' | 'fixed';
+  discount_value: number;
+  is_active: boolean;
+  expires_at: string | null;
+  max_uses: number | null;
+  used_count: number;
+  uses_per_user: number | null;
+  min_order_amount: number | null;
+  applicable_book_ids: string[];
+  applicable_category_ids: string[];
+  notes: string | null;
+  total_discount_given: number;
+  total_revenue: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AffiliateStats {

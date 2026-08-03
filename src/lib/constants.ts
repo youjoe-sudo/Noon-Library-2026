@@ -73,7 +73,6 @@ export const SOCIAL_LINKS = {
   facebook: 'https://www.facebook.com/share/19UjSNobdA/',
   instagram: 'https://www.instagram.com/noon_library123?igsh=Zzd0eDhmd3VkcnNp',
   telegram: 'https://t.me/noonlibrary23',
-  tiktok: 'https://www.tiktok.com/@noonlibrary5',
   email: 'noonlibrary.2026@outlook.com',
   whatsapp: '01021671068',
 };
