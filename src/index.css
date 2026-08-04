@@ -20,7 +20,11 @@
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-700 active:scale-[0.98] shadow-soft;
+    @apply btn text-white hover:opacity-90 active:scale-[0.98] shadow-soft;
+    background-color: var(--color-button, var(--color-primary, #1f7a4c));
+  }
+  .btn-primary:hover {
+    background-color: var(--color-button, var(--color-primary, #1f7a4c));
   }
   .btn-accent {
     @apply btn bg-accent-500 text-ink-950 hover:bg-accent-400 active:scale-[0.98] shadow-soft;
@@ -42,12 +46,14 @@
   }
   .card {
     @apply rounded-2xl border border-ink-100 bg-white shadow-card;
+    background-color: var(--color-card, #ffffff);
   }
   .badge {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
   }
   .skeleton {
-    @apply animate-pulse rounded-md bg-ink-200/60;
+    @apply animate-pulse rounded-md;
+    background-color: rgba(213, 217, 224, 0.5);
   }
   .section-title {
     @apply text-xl font-bold text-ink-900 sm:text-2xl;

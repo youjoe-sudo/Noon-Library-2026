@@ -108,7 +108,7 @@ export interface Order {
   promo_code_id: string | null;
   promo_code_text: string | null;
   referred_affiliate_id: string | null;
-  commission_source: 'coupon' | 'referral' | 'none' | null;
+  commission_source: 'coupon' | 'referral' | 'affiliate_code' | 'none' | null;
   books_subtotal: number;
   payment_sender_phone: string | null;
   payment_receipt_number: string | null;
@@ -216,6 +216,9 @@ export interface Notification {
 export interface Setting {
   key: string;
   value: string;
+  type?: string;
+  updated_at?: string;
+  updated_by?: string | null;
 }
 
 export type SettingsMap = Record<string, string>;
@@ -228,7 +231,7 @@ export interface Commission {
   coupon_id: string | null;
   coupon_code: string | null;
   referral_code: string | null;
-  commission_source: 'coupon' | 'referral';
+  commission_source: 'coupon' | 'referral' | 'affiliate_code';
   books_total: number;
   commission_rate: number;
   commission_amount: number;

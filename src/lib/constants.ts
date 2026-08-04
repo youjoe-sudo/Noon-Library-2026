@@ -75,6 +75,7 @@ export const SOCIAL_LINKS = {
   telegram: 'https://t.me/noonlibrary23',
   email: 'noonlibrary.2026@outlook.com',
   whatsapp: '01021671068',
+  tiktok: 'https://www.tiktok.com/@noonlibrary5',
 };
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {

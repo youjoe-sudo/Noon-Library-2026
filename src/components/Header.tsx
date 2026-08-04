@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth';
 import { useCart } from '@/lib/cart';
 import { supabase } from '@/lib/supabase';
 import type { Category, Notification } from '@/lib/types';
+import { useSettings } from '@/lib/settings';
 import {
   Search, ShoppingCart, User, Menu, X, Bell, Heart, LogOut,
   Package, MapPin, Settings, LayoutDashboard, Megaphone, BookOpen, MessageSquare,
@@ -13,6 +14,7 @@ import {
 export function Header() {
   const { route, navigate } = useHashRoute();
   const { profile, signOut } = useAuth();
+  const { settings } = useSettings();
   const { count } = useCart();
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -78,7 +80,7 @@ export function Header() {
       {/* Top bar */}
       <div className="bg-primary-800 text-primary-50">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-1.5 text-xs">
-          <p>شحن مجاني للطلبات فوق 500 ج.م</p>
+          <p>{settings.announcement_text || 'شحن مجاني للطلبات فوق 500 ج.م'}</p>
           <div className="flex items-center gap-4">
             <Link to="/about" className="hover:text-white transition-colors">من نحن</Link>
             <Link to="/contact" className="hover:text-white transition-colors">تواصل معنا</Link>
@@ -102,7 +104,7 @@ export function Header() {
             ن
           </div>
           <div className="hidden sm:block">
-            <h1 className="font-serif text-xl font-bold text-primary-800">مكتبة نون</h1>
+            <h1 className="font-serif text-xl font-bold text-primary-800">{settings.site_name || 'مكتبة نون'}</h1>
             <p className="text-xs text-ink-500">Noon Library</p>
           </div>
         </Link>

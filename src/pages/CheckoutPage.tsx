@@ -400,10 +400,10 @@ export function CheckoutPage() {
             <div className="rounded-xl border border-primary-200 bg-primary-50 p-4">
               <p className="font-semibold text-ink-900">تحويل بنكي / محفظة إلكترونية</p>
               <p className="mt-2 text-sm text-ink-600">
-                يحوّل المبلغ المطلوب إلى رقم فودافون كاش التالي:
+                {settings.payment_instructions || 'حوّل المبلغ المطلوب إلى رقم فودافون كاش التالي:'}
               </p>
               <div className="mt-3 flex items-center justify-center rounded-lg bg-white py-3 text-2xl font-bold tracking-wider text-primary-700" dir="ltr">
-                {PAYMENT_VODAFONE_NUMBER}
+                {settings.payment_account_vodafone || PAYMENT_VODAFONE_NUMBER}
               </div>
               <p className="mt-2 text-xs text-ink-500">
                 يمكنك الدفع عبر فودافون كاش أو إنستا باي أو أي محفظة إلكترونية. يحوّل المبلغ دائماً إلى الرقم أعلاه.

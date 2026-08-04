@@ -1,11 +1,22 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useSettings } from '@/lib/settings';
+import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
-import { Save, Truck, CreditCard, Percent, Wallet } from 'lucide-react';
+import { Save, Truck, CreditCard, Percent, Wallet, Palette, Type, FileText, Globe } from 'lucide-react';
+
+const AVAILABLE_FONTS = [
+  { value: 'Cairo', label: 'Cairo (القاهرة)' },
+  { value: 'Amiri', label: 'Amiri (أميري)' },
+  { value: 'Tajawal', label: 'Tajawal (تجوال)' },
+  { value: 'Almarai', label: 'Almarai (المرعي)' },
+  { value: 'Noto Sans Arabic', label: 'Noto Sans Arabic' },
+  { value: 'Reem Kufi', label: 'Reem Kufi (ريم كوفي)' },
+];
 
 export function AdminSettings() {
   const { settings, refresh } = useSettings();
+  const { profile } = useAuth();
   const { show } = useToast();
   const [form, setForm] = useState<Record<string, string>>(settings);
   const [saving, setSaving] = useState(false);
@@ -14,14 +25,23 @@ export function AdminSettings() {
 
   const handleSave = async () => {
     setSaving(true);
-    const updates = Object.entries(form)
-      .filter(([key, value]) => settings[key] !== value)
-      .map(([key, value]) => ({ key, value }));
+    const updates = Object.entries(form).filter(([key, value]) => settings[key] !== value);
     if (updates.length === 0) { setSaving(false); return; }
-    const { error } = await supabase.from('settings').upsert(updates, { onConflict: 'key' });
-    if (error) { show('فشل حفظ الإعدادات', 'error'); }
-    else {
-      show('تم حفظ الإعدادات', 'success');
+
+    let hasError = false;
+    for (const [key, value] of updates) {
+      const { error } = await supabase.rpc('update_setting', {
+        p_key: key,
+        p_value: value,
+        p_type: key.startsWith('theme_') ? 'color' : 'string',
+      });
+      if (error) { hasError = true; console.error(`Failed to save ${key}:`, error); }
+    }
+
+    if (hasError) {
+      show('فشل حفظ بعض الإعدادات', 'error');
+    } else {
+      show('تم حفظ الإعدادات بنجاح', 'success');
       await refresh();
     }
     setSaving(false);
@@ -35,6 +55,68 @@ export function AdminSettings() {
           <Save size={16} /> {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
         </button>
       </div>
+
+      {/* Theme / Colors */}
+      <section className="card p-6">
+        <h3 className="mb-4 flex items-center gap-2 font-bold text-ink-900">
+          <Palette size={20} className="text-primary-600" /> الألوان والمظهر
+        </h3>
+        <p className="mb-4 text-sm text-ink-500">تحكم في ألوان الموقع. التغييرات تُطبق فوراً على الموقع بالكامل.</p>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <ColorField label="اللون الأساسي" value={form.theme_primary ?? ''} onChange={(v) => setForm({ ...form, theme_primary: v })} />
+          <ColorField label="لون التمييز" value={form.theme_accent ?? ''} onChange={(v) => setForm({ ...form, theme_accent: v })} />
+          <ColorField label="لون الخلفية" value={form.theme_background ?? ''} onChange={(v) => setForm({ ...form, theme_background: v })} />
+          <ColorField label="لون البطاقات" value={form.theme_card ?? ''} onChange={(v) => setForm({ ...form, theme_card: v })} />
+          <ColorField label="لون النص" value={form.theme_text ?? ''} onChange={(v) => setForm({ ...form, theme_text: v })} />
+          <ColorField label="لون الحدود" value={form.theme_border ?? ''} onChange={(v) => setForm({ ...form, theme_border: v })} />
+          <ColorField label="لون الأزرار" value={form.theme_button ?? ''} onChange={(v) => setForm({ ...form, theme_button: v })} />
+        </div>
+      </section>
+
+      {/* Font Management */}
+      <section className="card p-6">
+        <h3 className="mb-4 flex items-center gap-2 font-bold text-ink-900">
+          <Type size={20} className="text-primary-600" /> إدارة الخطوط
+        </h3>
+        <p className="mb-4 text-sm text-ink-500">اختر الخطوط المستخدمة في الموقع.</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="label">الخط الأساسي</label>
+            <select value={form.font_primary ?? 'Cairo'} onChange={(e) => setForm({ ...form, font_primary: e.target.value })} className="input">
+              {AVAILABLE_FONTS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">خط العناوين</label>
+            <select value={form.font_heading ?? 'Amiri'} onChange={(e) => setForm({ ...form, font_heading: e.target.value })} className="input">
+              {AVAILABLE_FONTS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+          </div>
+        </div>
+      </section>
+
+      {/* Content Management */}
+      <section className="card p-6">
+        <h3 className="mb-4 flex items-center gap-2 font-bold text-ink-900">
+          <Globe size={20} className="text-primary-600" /> محتوى الموقع
+        </h3>
+        <p className="mb-4 text-sm text-ink-500">النصوص التي تظهر للعملاء في الموقع.</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="اسم الموقع" value={form.site_name ?? ''} onChange={(v) => setForm({ ...form, site_name: v })} />
+          <Field label="الشعار / الوصف" value={form.site_tagline ?? ''} onChange={(v) => setForm({ ...form, site_tagline: v })} />
+          <Field label="نص البانر العلوي" value={form.announcement_text ?? ''} onChange={(v) => setForm({ ...form, announcement_text: v })} />
+          <Field label="نص الفوتر" value={form.footer_text ?? ''} onChange={(v) => setForm({ ...form, footer_text: v })} />
+          <Field label="رقم واتساب" value={form.whatsapp_number ?? ''} onChange={(v) => setForm({ ...form, whatsapp_number: v })} dir="ltr" />
+          <Field label="البريد الإلكتروني" value={form.contact_email ?? ''} onChange={(v) => setForm({ ...form, contact_email: v })} dir="ltr" />
+          <Field label="رابط فيسبوك" value={form.facebook_url ?? ''} onChange={(v) => setForm({ ...form, facebook_url: v })} dir="ltr" />
+          <Field label="رابط انستجرام" value={form.instagram_url ?? ''} onChange={(v) => setForm({ ...form, instagram_url: v })} dir="ltr" />
+          <Field label="رابط تيليجرام" value={form.telegram_url ?? ''} onChange={(v) => setForm({ ...form, telegram_url: v })} dir="ltr" />
+          <div className="sm:col-span-2">
+            <label className="label">تعليمات الدفع</label>
+            <textarea value={form.payment_instructions ?? ''} onChange={(e) => setForm({ ...form, payment_instructions: e.target.value })} className="input min-h-20" />
+          </div>
+        </div>
+      </section>
 
       {/* Shipping */}
       <section className="card p-6">
@@ -97,6 +179,29 @@ function Field({ label, value, onChange, dir }: { label: string; value: string; 
     <div>
       <label className="label">{label}</label>
       <input value={value} onChange={(e) => onChange(e.target.value)} className="input" dir={dir} />
+    </div>
+  );
+}
+
+function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="label">{label}</label>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={value || '#1f7a4c'}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-ink-200"
+        />
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="input"
+          dir="ltr"
+          placeholder="#1f7a4c"
+        />
+      </div>
     </div>
   );
 }
