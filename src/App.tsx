@@ -7,6 +7,7 @@ import { useHashRoute, parseRoute, getQueryParam } from '@/lib/router';
 import { processReferralLink } from '@/lib/referral';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
+import { SEO } from '@/components/SEO';
 import { HomePage } from '@/pages/HomePage';
 import { BookDetailPage } from '@/pages/BookDetailPage';
 import { BrowsePage } from '@/pages/BrowsePage';
@@ -26,11 +27,56 @@ import { ContactPage } from '@/pages/ContactPage';
 import { TicketsPage } from '@/pages/TicketsPage';
 import { TicketDetailPage } from '@/pages/TicketDetailPage';
 import { ReturnPolicyPage } from '@/pages/ReturnPolicyPage';
+import { OfferPage } from '@/pages/OfferPage';
+import { OffersPage } from '@/pages/OffersPage';
 
 function AppContent() {
   const { route } = useHashRoute();
   const { profile, loading } = useAuth();
   const { page, params } = parseRoute(route);
+  const seoConfig = {
+  home: {
+    title: 'مكتبة نون - كتب وروايات عربية',
+    description:
+      'اكتشف آلاف الكتب والروايات العربية في مكتبة نون. كتب في الأدب والعلوم والتاريخ والفلسفة والتعليم مع شحن لجميع محافظات مصر.',
+  },
+
+  category: {
+    title: 'تصفح الكتب',
+    description:
+      'تصفح مجموعة متنوعة من الكتب والروايات العربية واكتشف كتابك القادم من مكتبة نون.',
+  },
+
+  search: {
+    title: 'البحث عن الكتب',
+    description:
+      'ابحث عن الكتب والروايات التي تريدها في مكتبة نون.',
+  },
+
+  about: {
+    title: 'من نحن',
+    description:
+      'تعرف على مكتبة نون ورؤيتنا في توفير الكتب والروايات العربية للقراء في مصر.',
+  },
+
+  contact: {
+    title: 'تواصل معنا',
+    description:
+      'تواصل مع فريق مكتبة نون للاستفسارات والمساعدة والدعم.',
+  },
+
+  offers: {
+    title: 'عروض الكتب',
+    description:
+      'اكتشف أحدث عروض وخصومات الكتب في مكتبة نون.',
+  },
+
+  returnPolicy: {
+    title: 'سياسة الإرجاع',
+    description:
+      'تعرف على سياسة الإرجاع والاستبدال في مكتبة نون.',
+  },
+};
 
   useEffect(() => {
     processReferralLink();
@@ -68,6 +114,42 @@ function AppContent() {
 
   return (
     <>
+    <SEO
+  title={
+    page === 'home'
+      ? seoConfig.home.title
+      : page === 'category'
+        ? seoConfig.category.title
+        : page === 'search'
+          ? seoConfig.search.title
+          : page === 'about'
+            ? seoConfig.about.title
+            : page === 'contact'
+              ? seoConfig.contact.title
+              : page === 'offers'
+                ? seoConfig.offers.title
+                : page === 'return-policy'
+                  ? seoConfig.returnPolicy.title
+                  : undefined
+  }
+  description={
+    page === 'home'
+      ? seoConfig.home.description
+      : page === 'category'
+        ? seoConfig.category.description
+        : page === 'search'
+          ? seoConfig.search.description
+          : page === 'about'
+            ? seoConfig.about.description
+            : page === 'contact'
+              ? seoConfig.contact.description
+              : page === 'offers'
+                ? seoConfig.offers.description
+                : page === 'return-policy'
+                  ? seoConfig.returnPolicy.description
+                  : undefined
+  }
+/>
       <Header />
       <main className="min-h-[60vh]">
         {page === 'home' && <HomePage />}
@@ -92,6 +174,8 @@ function AppContent() {
         {page === 'tickets' && <TicketsPage />}
         {page === 'ticket' && <TicketDetailPage id={params.id} />}
         {page === 'return-policy' && <ReturnPolicyPage />}
+        {page === 'offers' && <OffersPage />}
+        {page === 'offer' && <OfferPage slug={params.slug} />}
       </main>
       <Footer />
     </>

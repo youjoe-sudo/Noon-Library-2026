@@ -47,7 +47,6 @@ const DEFAULT_SETTINGS: SettingsMap = {
   facebook_url: 'https://www.facebook.com/share/19UjSNobdA/',
   instagram_url: 'https://www.instagram.com/noon_library123',
   telegram_url: 'https://t.me/noonlibrary23',
-  tiktok_url: 'https://www.tiktok.com/@noonlibrary5',
   payment_instructions: 'حوّل المبلغ المطلوب إلى رقم فودافون كاش: 01021671068',
 };
 

@@ -1,8 +1,13 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import { supabase } from './supabase';
 import { useAuth } from './auth';
-import type { CartItem, Book } from './types';
+import type { CartItem, Book, Offer } from './types';
 import { useToast } from './toast';
+
+export interface OfferCartSelection {
+  offerId: string;
+  bookIds: string[];
+}
 
 interface CartContextValue {
   items: CartItem[];
@@ -13,15 +18,40 @@ interface CartContextValue {
   removeItem: (itemId: string) => Promise<void>;
   clearCart: () => Promise<void>;
   refresh: () => Promise<void>;
+  offerSelections: Record<string, string[]>;
+  setOfferSelection: (offerId: string, bookIds: string[]) => void;
+  toggleOfferBook: (offerId: string, bookId: string) => void;
+  clearOfferSelection: (offerId: string) => void;
+  clearAllOfferSelections: () => void;
 }
 
 const CartContext = createContext<CartContextValue | undefined>(undefined);
+
+const OFFER_CART_KEY = 'noon_offer_cart';
+
+function loadOfferSelections(): Record<string, string[]> {
+  try {
+    const raw = localStorage.getItem(OFFER_CART_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, string[]>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveOfferSelections(sel: Record<string, string[]>) {
+  try {
+    localStorage.setItem(OFFER_CART_KEY, JSON.stringify(sel));
+  } catch {
+    // ignore
+  }
+}
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth();
   const { show } = useToast();
   const [items, setItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [offerSelections, setOfferSelections] = useState<Record<string, string[]>>(loadOfferSelections);
 
   const fetchCart = useCallback(async () => {
     if (!session?.user) {
@@ -46,6 +76,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     fetchCart();
   }, [fetchCart]);
+
+  useEffect(() => {
+    saveOfferSelections(offerSelections);
+  }, [offerSelections]);
 
   const addToCart = useCallback(async (bookId: string, quantity = 1) => {
     if (!session?.user) {
@@ -102,10 +136,45 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems([]);
   }, [session]);
 
-  const count = items.reduce((sum, i) => sum + i.quantity, 0);
+  const setOfferSelection = useCallback((offerId: string, bookIds: string[]) => {
+    setOfferSelections((prev) => {
+      const next = { ...prev };
+      if (bookIds.length === 0) delete next[offerId];
+      else next[offerId] = bookIds;
+      return next;
+    });
+  }, []);
+
+  const toggleOfferBook = useCallback((offerId: string, bookId: string) => {
+    setOfferSelections((prev) => {
+      const current = prev[offerId] ?? [];
+      const next = current.includes(bookId) ? current.filter((id) => id !== bookId) : [...current, bookId];
+      const copy = { ...prev };
+      if (next.length === 0) delete copy[offerId];
+      else copy[offerId] = next;
+      return copy;
+    });
+  }, []);
+
+  const clearOfferSelection = useCallback((offerId: string) => {
+    setOfferSelections((prev) => {
+      const copy = { ...prev };
+      delete copy[offerId];
+      return copy;
+    });
+  }, []);
+
+  const clearAllOfferSelections = useCallback(() => {
+    setOfferSelections({});
+  }, []);
+
+  const count = items.reduce((sum, i) => sum + i.quantity, 0) + Object.values(offerSelections).reduce((sum, ids) => sum + ids.length, 0);
 
   return (
-    <CartContext.Provider value={{ items, loading, count, addToCart, updateQuantity, removeItem, clearCart, refresh: fetchCart }}>
+    <CartContext.Provider value={{
+      items, loading, count, addToCart, updateQuantity, removeItem, clearCart, refresh: fetchCart,
+      offerSelections, setOfferSelection, toggleOfferBook, clearOfferSelection, clearAllOfferSelections,
+    }}>
       {children}
     </CartContext.Provider>
   );
@@ -134,4 +203,4 @@ export function getCartBookCount(items: CartItem[]): number {
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export type { Book };
+export type { Book, Offer };

@@ -82,6 +82,7 @@ export function Header() {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-1.5 text-xs">
           <p>{settings.announcement_text || 'شحن مجاني للطلبات فوق 500 ج.م'}</p>
           <div className="flex items-center gap-4">
+            <Link to="/offers" className="hover:text-white transition-colors">العروض</Link>
             <Link to="/about" className="hover:text-white transition-colors">من نحن</Link>
             <Link to="/contact" className="hover:text-white transition-colors">تواصل معنا</Link>
             <Link to="/affiliate" className="hover:text-white transition-colors">التسويق بالعمولة</Link>

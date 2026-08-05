@@ -4,6 +4,7 @@ import { BookCard } from '@/components/BookCard';
 import { supabase } from '@/lib/supabase';
 import { useCart } from '@/lib/cart';
 import { useAuth } from '@/lib/auth';
+import { SEO } from '@/components/SEO';
 import { useToast } from '@/lib/toast';
 import type { Book, Category } from '@/lib/types';
 import { getEffectivePrice, getDiscountPercent, formatPrice } from '@/lib/constants';

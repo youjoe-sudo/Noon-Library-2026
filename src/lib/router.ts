@@ -47,6 +47,10 @@ export function parseRoute(route: string): { page: string; params: Record<string
   if (parts[0] === 'tickets') return { page: 'tickets', params: {} };
   if (parts[0] === 'ticket' && parts[1]) return { page: 'ticket', params: { id: parts[1] } };
   if (parts[0] === 'return-policy') return { page: 'return-policy', params: {} };
+  if (parts[0] === 'offers') {
+    if (parts[1]) return { page: 'offer', params: { slug: parts[1] } };
+    return { page: 'offers', params: {} };
+  }
 
   return { page: 'home', params: {} };
 }

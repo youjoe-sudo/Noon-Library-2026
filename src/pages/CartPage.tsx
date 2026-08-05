@@ -3,15 +3,46 @@ import { Link } from '@/components/Link';
 import { useCart, getCartSubtotal, getCartBookCount } from '@/lib/cart';
 import { useSettings } from '@/lib/settings';
 import { formatPrice, isFreeShipping } from '@/lib/constants';
-import { Minus, Plus, Trash2, ShoppingBag, ArrowLeft } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { useEffect } from 'react';
+import type { Offer } from '@/lib/types';
+import { Minus, Plus, Trash2, ShoppingBag, ArrowLeft, Tag } from 'lucide-react';
 
 export function CartPage() {
-  const { items, loading, updateQuantity, removeItem } = useCart();
+  const { items, loading, updateQuantity, removeItem, offerSelections, clearOfferSelection } = useCart();
   const { settings } = useSettings();
   const [updating, setUpdating] = useState<string | null>(null);
+  const [offerDetails, setOfferDetails] = useState<Record<string, Offer>>({});
+  const [offerBooks, setOfferBooks] = useState<Record<string, { id: string; title: string; author: string | null; cover_url: string | null }[]>>({});
 
-  const subtotal = getCartSubtotal(items);
-  const bookCount = getCartBookCount(items);
+  const offerIds = Object.keys(offerSelections).filter((id) => (offerSelections[id] ?? []).length > 0);
+  useEffect(() => {
+    if (offerIds.length === 0) { setOfferDetails({}); setOfferBooks({}); return; }
+    (async () => {
+      const { data: od } = await supabase.from('offers').select('*').in('id', offerIds);
+      const map: Record<string, Offer> = {};
+      for (const o of (od as Offer[]) ?? []) map[o.id] = o;
+      setOfferDetails(map);
+      const booksMap: Record<string, { id: string; title: string; author: string | null; cover_url: string | null }[]> = {};
+      for (const oid of offerIds) {
+        const ids = offerSelections[oid];
+        if (!ids || ids.length === 0) continue;
+        const { data: bd } = await supabase.from('books').select('id, title, author, cover_url').in('id', ids);
+        booksMap[oid] = (bd as { id: string; title: string; author: string | null; cover_url: string | null }[]) ?? [];
+      }
+      setOfferBooks(booksMap);
+    })();
+  }, [offerSelections]);
+
+  const offerSubtotal = offerIds.reduce((sum, oid) => {
+    const o = offerDetails[oid];
+    const ids = offerSelections[oid] ?? [];
+    return sum + (o ? ids.length * o.price_per_book : 0);
+  }, 0);
+  const offerBookCount = offerIds.reduce((s, oid) => s + (offerSelections[oid]?.length ?? 0), 0);
+
+  const subtotal = getCartSubtotal(items) + offerSubtotal;
+  const bookCount = getCartBookCount(items) + offerBookCount;
   const freeShip = isFreeShipping(subtotal, settings);
   const shipping = freeShip ? 0 : 0;
   const total = subtotal + shipping;
@@ -29,7 +60,7 @@ export function CartPage() {
     );
   }
 
-  if (items.length === 0) {
+  if (items.length === 0 && offerBookCount === 0) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-20 text-center">
         <ShoppingBag size={64} className="mx-auto text-ink-300" />
@@ -47,6 +78,41 @@ export function CartPage() {
       <h1 className="section-title mb-6">سلة التسوق ({items.length} منتج)</h1>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_350px]">
+        {/* Offer selections */}
+        {offerIds.length > 0 && (
+          <div className="space-y-4 lg:col-span-1">
+            {offerIds.map((oid) => {
+              const o = offerDetails[oid];
+              const ids = offerSelections[oid] ?? [];
+              const oBooks = offerBooks[oid] ?? [];
+              if (!o || ids.length === 0) return null;
+              return (
+                <div key={oid} className="card p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Tag size={18} className="text-primary-600" />
+                      <h3 className="font-bold text-ink-900">{o.name}</h3>
+                    </div>
+                    <button onClick={() => clearOfferSelection(oid)} className="text-xs text-red-500 hover:underline">إزالة العرض</button>
+                  </div>
+                  <p className="mb-3 text-xs text-ink-500">{ids.length} كتاب • {formatPrice(ids.length * o.price_per_book)}</p>
+                  <div className="space-y-2">
+                    {oBooks.map((b) => (
+                      <div key={b.id} className="flex items-center gap-3">
+                        <div className="h-10 w-8 shrink-0 overflow-hidden rounded bg-ink-100">
+                          {b.cover_url && <img src={b.cover_url} alt={b.title} className="h-full w-full object-cover" />}
+                        </div>
+                        <p className="flex-1 text-sm text-ink-700">{b.title}</p>
+                        <span className="text-xs font-bold text-primary-700">{formatPrice(o.price_per_book)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* Items */}
         <div className="space-y-4">
           {items.map((item) => {
