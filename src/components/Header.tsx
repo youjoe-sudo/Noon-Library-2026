@@ -234,6 +234,9 @@ export function Header() {
           <Link to="/" className="rounded-lg px-3 py-1.5 text-sm font-semibold text-ink-700 hover:bg-primary-50 hover:text-primary-700">
             الرئيسية
           </Link>
+          <Link to="/categories" className="rounded-lg px-3 py-1.5 text-sm font-semibold text-ink-700 hover:bg-primary-50 hover:text-primary-700">
+            التصنيفات
+          </Link>
           {categories.map((cat) => (
             <Link
               key={cat.id}
@@ -252,6 +255,9 @@ export function Header() {
           <div className="max-h-[70vh] overflow-y-auto p-4">
             <Link to="/" onClick={() => setMenuOpen(false)} className="block rounded-lg px-3 py-2 text-sm font-semibold text-ink-700 hover:bg-primary-50">
               الرئيسية
+            </Link>
+            <Link to="/categories" onClick={() => setMenuOpen(false)} className="block rounded-lg px-3 py-2 text-sm font-semibold text-ink-700 hover:bg-primary-50">
+              التصنيفات
             </Link>
             {categories.map((cat) => (
               <Link

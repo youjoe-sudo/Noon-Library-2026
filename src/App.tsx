@@ -26,6 +26,7 @@ import { ContactPage } from '@/pages/ContactPage';
 import { TicketsPage } from '@/pages/TicketsPage';
 import { TicketDetailPage } from '@/pages/TicketDetailPage';
 import { ReturnPolicyPage } from '@/pages/ReturnPolicyPage';
+import { CategoriesPage } from '@/pages/CategoriesPage';
 
 function AppContent() {
   const { route } = useHashRoute();
@@ -72,6 +73,7 @@ function AppContent() {
       <main className="min-h-[60vh]">
         {page === 'home' && <HomePage />}
         {page === 'book' && <BookDetailPage id={params.id} />}
+        {page === 'categories' && <CategoriesPage />}
         {page === 'category' && <BrowsePage slug={params.slug} />}
         {page === 'search' && <BrowsePage searchQuery={getQueryParam(route, 'q') ?? ''} />}
         {page === 'cart' && <CartPage />}
