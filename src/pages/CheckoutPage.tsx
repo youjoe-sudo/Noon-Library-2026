@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link } from '@/components/Link';
 import { useCart, getCartSubtotal, getCartBookCount } from '@/lib/cart';
-import type { Offer, OfferValidationResult } from '@/lib/types';
 import { useSettings } from '@/lib/settings';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
@@ -10,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { getStoredReferral, clearReferral } from '@/lib/referral';
 import type { Address, AffiliateCodeResult, DiscountCodeResult } from '@/lib/types';
 import {
-  EGYPT_GOVERNORATES, SHIPPING_METHODS, PAYMENT_METHODS,
+  EGYPT_GOVERNORATES, SHIPPING_METHODS,
   getShippingCost, isFreeShipping, formatPrice, generateOrderNumber,
   PAYMENT_VODAFONE_NUMBER,
 } from '@/lib/constants';
@@ -18,7 +17,7 @@ import { MapPin, CreditCard, Truck, Check, Tag, X, UserCheck, Loader2 } from 'lu
 import { ReceiptUpload } from '@/components/ReceiptUpload';
 
 export function CheckoutPage() {
-  const { items, clearCart, offerSelections, clearAllOfferSelections } = useCart();
+  const { items, clearCart } = useCart();
   const { settings } = useSettings();
   const { profile } = useAuth();
   const { show } = useToast();
@@ -29,50 +28,17 @@ export function CheckoutPage() {
   const [newAddress, setNewAddress] = useState({ full_name: '', phone: '', governorate: '', city: '', area: '', address_detail: '' });
   const [useNewAddress, setUseNewAddress] = useState(false);
   const [shippingMethod, setShippingMethod] = useState<'express' | 'postal'>('express');
-  const [paymentMethod, setPaymentMethod] = useState<'full'>('full');
+  const [paymentMethod] = useState<'full'>('full');
   const [paymentInfo, setPaymentInfo] = useState({ sender_phone: '', receipt_number: '', screenshot_url: '' });
   const [submitting, setSubmitting] = useState(false);
 
-  // Affiliate code state
   const [affiliateCode, setAffiliateCode] = useState('');
   const [affiliateResult, setAffiliateResult] = useState<AffiliateCodeResult | null>(null);
   const [affiliateLoading, setAffiliateLoading] = useState(false);
 
-  // Discount code state
   const [discountCode, setDiscountCode] = useState('');
   const [discountResult, setDiscountResult] = useState<DiscountCodeResult | null>(null);
   const [discountLoading, setDiscountLoading] = useState(false);
-
-  // Offer state
-  const [offerDetails, setOfferDetails] = useState<Record<string, Offer>>({});
-  const [offerBooks, setOfferBooks] = useState<Record<string, { id: string; title: string; author: string | null; cover_url: string | null; stock: number }[]>>({});
-  const [offerSubtotals, setOfferSubtotals] = useState<Record<string, number>>({});
-
-  useEffect(() => {
-    const offerIds = Object.keys(offerSelections).filter((id) => (offerSelections[id] ?? []).length > 0);
-    if (offerIds.length === 0) { setOfferDetails({}); setOfferBooks({}); setOfferSubtotals({}); return; }
-    (async () => {
-      const { data: offersData } = await supabase.from('offers').select('*').in('id', offerIds);
-      const offersMap: Record<string, Offer> = {};
-      for (const o of (offersData as Offer[]) ?? []) offersMap[o.id] = o;
-      setOfferDetails(offersMap);
-      const booksMap: Record<string, { id: string; title: string; author: string | null; cover_url: string | null; stock: number }[]> = {};
-      for (const oid of offerIds) {
-        const ids = offerSelections[oid];
-        if (!ids || ids.length === 0) continue;
-        const { data: bd } = await supabase.from('books').select('id, title, author, cover_url, stock').in('id', ids);
-        booksMap[oid] = (bd as { id: string; title: string; author: string | null; cover_url: string | null; stock: number }[]) ?? [];
-      }
-      setOfferBooks(booksMap);
-    })();
-  }, [offerSelections]);
-
-  const offerTotalSubtotal = Object.entries(offerSelections).reduce((sum, [oid, bookIds]) => {
-    const offer = offerDetails[oid];
-    if (!offer || !bookIds || bookIds.length === 0) return sum;
-    return sum + bookIds.length * offer.price_per_book;
-  }, 0);
-  const offerBookCount = Object.values(offerSelections).reduce((s, ids) => s + (ids?.length ?? 0), 0);
 
   useEffect(() => {
     if (!profile) return;
@@ -84,18 +50,16 @@ export function CheckoutPage() {
     });
   }, [profile]);
 
-  // Pre-fill affiliate code from stored referral link
   useEffect(() => {
     const referral = getStoredReferral();
     if (referral) {
       setAffiliateCode(referral.referralCode);
-      // Auto-validate
       validateAffiliateCode(referral.referralCode);
     }
   }, []);
 
-  const subtotal = getCartSubtotal(items) + offerTotalSubtotal;
-  const bookCount = getCartBookCount(items) + offerBookCount;
+  const subtotal = getCartSubtotal(items);
+  const bookCount = getCartBookCount(items);
   const address = addresses.find((a) => a.id === selectedAddressId);
   const governorate = useNewAddress ? newAddress.governorate : (address?.governorate ?? '');
   const shippingCost = useMemo(() => {
@@ -104,7 +68,6 @@ export function CheckoutPage() {
     return getShippingCost(governorate, shippingMethod, settings, bookCount);
   }, [governorate, shippingMethod, settings, bookCount, subtotal]);
 
-  // Calculate discounts independently
   const affiliateDiscountAmount = affiliateResult?.valid
     ? (subtotal * (affiliateResult.customer_discount_percent ?? 0)) / 100
     : 0;
@@ -152,7 +115,7 @@ export function CheckoutPage() {
 
   const handleSubmit = async () => {
     if (!profile) { show('يرجى تسجيل الدخول', 'error'); return; }
-    if (items.length === 0 && offerBookCount === 0) { show('السلة فارغة', 'error'); return; }
+    if (items.length === 0) { show('السلة فارغة', 'error'); return; }
     if (!governorate) { show('يرجى اختيار المحافظة', 'error'); return; }
 
     let addr: { full_name: string; phone: string; governorate: string; city?: string | null; area?: string | null; address_detail?: string | null };
@@ -176,8 +139,6 @@ export function CheckoutPage() {
       }
     }
 
-    // Determine affiliate attribution
-    // Priority: affiliate code entered > stored referral link
     const storedReferral = getStoredReferral();
     let referredAffiliateId: string | null = null;
     let commissionSource: 'affiliate_code' | 'referral' | 'none' = 'none';
@@ -193,7 +154,6 @@ export function CheckoutPage() {
       affiliateCodeText = storedReferral.referralCode;
     }
 
-    // Self-referral prevention
     if (referredAffiliateId) {
       const { data: aff } = await supabase
         .from('affiliate_profiles')
@@ -209,7 +169,6 @@ export function CheckoutPage() {
       }
     }
 
-    // Discount code
     const discountCodeId = discountResult?.valid ? discountResult.discount_code_id ?? null : null;
     const discountCodeTextVal = discountResult?.valid ? discountResult.code ?? null : null;
 
@@ -257,46 +216,16 @@ export function CheckoutPage() {
           subtotal: price * item.quantity,
           cover_url: item.book.cover_url,
         };
-      }).filter(Boolean) as { order_id: string; book_id: string; book_title: string; book_author: string | null; quantity: number; unit_price: number; subtotal: number; cover_url: string | null; offer_id?: string }[];
-
-      // Validate and add offer items (server-computed price, never trust frontend)
-      let validatedOfferSubtotal = 0;
-      for (const [oid, bookIds] of Object.entries(offerSelections)) {
-        if (!bookIds || bookIds.length === 0) continue;
-        const { data: vData, error: vError } = await supabase.rpc('validate_offer_cart', { p_offer_id: oid, p_book_ids: bookIds });
-        if (vError) throw vError;
-        const v = vData as OfferValidationResult;
-        if (!v.valid) { throw new Error(v.error ?? 'فشل التحقق من العرض'); }
-        validatedOfferSubtotal += v.subtotal ?? 0;
-        const offer = offerDetails[oid];
-        const oBooks = offerBooks[oid] ?? [];
-        for (const bid of v.book_ids ?? []) {
-          const b = oBooks.find((x) => x.id === bid);
-          if (!b) continue;
-          orderItems.push({
-            order_id: orderData.id,
-            book_id: bid,
-            book_title: b.title,
-            book_author: b.author,
-            quantity: 1,
-            unit_price: offer?.price_per_book ?? v.price_per_book ?? 0,
-            subtotal: offer?.price_per_book ?? v.price_per_book ?? 0,
-            cover_url: b.cover_url,
-            offer_id: oid,
-          });
-        }
-      }
+      }).filter(Boolean) as { order_id: string; book_id: string; book_title: string; book_author: string | null; quantity: number; unit_price: number; subtotal: number; cover_url: string | null }[];
 
       await supabase.from('order_items').insert(orderItems);
 
-      // Record discount code usage
       if (discountCodeId) {
         await supabase.from('discount_code_usages').insert({
           discount_code_id: discountCodeId,
           user_id: profile.id,
           order_id: orderData.id,
         });
-        // Update discount code stats
         await supabase.rpc('increment_discount_code_usage', {
           p_code_id: discountCodeId,
           p_discount_amount: discountCodeDiscountAmount,
@@ -304,7 +233,6 @@ export function CheckoutPage() {
         });
       }
 
-      // Log affiliate activity
       if (referredAffiliateId) {
         await supabase.from('affiliate_activity_logs').insert({
           affiliate_id: referredAffiliateId,
@@ -334,7 +262,6 @@ export function CheckoutPage() {
       }
 
       await clearCart();
-      clearAllOfferSelections();
       show('تم إرسال طلبك بنجاح', 'success');
       navigate(`/order/${orderData.id}`);
     } catch (err) {
@@ -345,7 +272,7 @@ export function CheckoutPage() {
     }
   };
 
-  if (items.length === 0 && offerBookCount === 0) {
+  if (items.length === 0) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-20 text-center">
         <h2 className="text-xl font-bold text-ink-900">السلة فارغة</h2>
@@ -405,7 +332,7 @@ export function CheckoutPage() {
                 </div>
                 <div>
                   <label className="label">رقم الهاتف</label>
-                  <input value={newAddress.phone} onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value })} className="input" dir="ltr" />
+                  <input value={newAddress.phone} onChange={(e) => setNewAddress({ ...newAddress, full_name: newAddress.full_name, phone: e.target.value })} className="input" dir="ltr" />
                 </div>
                 <div>
                   <label className="label">المحافظة</label>

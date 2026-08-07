@@ -1,12 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/lib/toast';
-import { useHashRoute } from '@/lib/router';
 import type { Offer, OfferStatus } from '@/lib/types';
 import { formatPrice, formatDate } from '@/lib/constants';
 import { ImageUpload } from '@/components/ImageUpload';
-import { AdminOfferBooks } from './AdminOfferBooks';
-import { Plus, Pencil, Trash2, X, Search, Tag, Eye, EyeOff, ExternalLink, BarChart3, HelpCircle, Copy } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Search, Tag, Eye, EyeOff, ExternalLink, HelpCircle, Copy, ArrowUp, ArrowDown, ListChecks } from 'lucide-react';
 
 const EMPTY_FORM = {
   name: '',
@@ -19,6 +17,8 @@ const EMPTY_FORM = {
   start_at: '',
   end_at: '',
   status: 'draft' as OfferStatus,
+  display_order: 0,
+  book_list_text: '',
 };
 
 function slugify(s: string): string {
@@ -30,22 +30,32 @@ function slugify(s: string): string {
     .slice(0, 80);
 }
 
+function parseBookList(text: string): string[] {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const line of lines) {
+    if (!seen.has(line)) {
+      seen.add(line);
+      result.push(line);
+    }
+  }
+  return result;
+}
+
 export function AdminOffers() {
   const { show } = useToast();
-  const { route, navigate } = useHashRoute();
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
-  const [analytics, setAnalytics] = useState<Record<string, { orders: number; revenue: number; books_sold: number; customers: number; top_books: { title: string; count: number }[] }>>({});
   const [showGuide, setShowGuide] = useState(false);
-  const [managingOfferId, setManagingOfferId] = useState<string | null>(null);
 
   const fetchOffers = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('offers').select('*').order('created_at', { ascending: false });
+    const { data } = await supabase.from('offers').select('*').order('display_order', { ascending: true });
     setOffers((data as Offer[]) ?? []);
     setLoading(false);
   }, []);
@@ -54,62 +64,6 @@ export function AdminOffers() {
     fetchOffers();
   }, [fetchOffers]);
 
-  // Detect deep link to manage books for a specific offer
-  useEffect(() => {
-    const parts = route.split('/').filter(Boolean);
-    if (parts[0] === 'admin' && parts[1] === 'offers' && parts[2] === 'manage' && parts[3]) {
-      setManagingOfferId(parts[3]);
-    } else {
-      setManagingOfferId(null);
-    }
-  }, [route]);
-
-  const fetchAnalytics = useCallback(async () => {
-    if (offers.length === 0) return;
-    const ids = offers.map((o) => o.id);
-    const { data } = await supabase
-      .from('order_items')
-      .select('order_id, book_title, quantity, unit_price')
-      .not('offer_id', 'is', null)
-      .in('offer_id', ids);
-    if (!data) return;
-    const map: Record<string, { orders: Set<string>; revenue: number; books_sold: number; customers: Set<string>; top: Record<string, number> }> = {};
-    for (const item of data as { order_id: string; book_title: string; quantity: number; unit_price: number; offer_id?: string }[]) {
-      const oid = (item as { offer_id?: string }).offer_id;
-      if (!oid) continue;
-      if (!map[oid]) map[oid] = { orders: new Set(), revenue: 0, books_sold: 0, customers: new Set(), top: {} };
-      map[oid].orders.add(item.order_id);
-      map[oid].revenue += item.unit_price * item.quantity;
-      map[oid].books_sold += item.quantity;
-      map[oid].top[item.book_title] = (map[oid].top[item.book_title] ?? 0) + item.quantity;
-    }
-    // fetch customer counts
-    const orderIds = Object.values(map).flatMap((m) => Array.from(m.orders));
-    let custMap: Record<string, string[]> = {};
-    if (orderIds.length > 0) {
-      const { data: orders } = await supabase.from('orders').select('id, user_id').in('id', orderIds);
-      custMap = {};
-      for (const o of (orders ?? []) as { id: string; user_id: string }[]) {
-        if (!custMap[o.id]) custMap[o.id] = [];
-        custMap[o.id].push(o.user_id);
-      }
-    }
-    const result: Record<string, { orders: number; revenue: number; books_sold: number; customers: number; top_books: { title: string; count: number }[] }> = {};
-    for (const [oid, m] of Object.entries(map)) {
-      const customers = new Set<string>();
-      for (const orderId of m.orders) {
-        for (const u of custMap[orderId] ?? []) customers.add(u);
-      }
-      const topBooks = Object.entries(m.top).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([title, count]) => ({ title, count }));
-      result[oid] = { orders: m.orders.size, revenue: m.revenue, books_sold: m.books_sold, customers: customers.size, top_books: topBooks };
-    }
-    setAnalytics(result);
-  }, [offers]);
-
-  useEffect(() => {
-    fetchAnalytics();
-  }, [fetchAnalytics]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) { show('يرجى إدخال اسم العرض', 'error'); return; }
@@ -117,6 +71,9 @@ export function AdminOffers() {
     if (form.min_books < 1) { show('الحد الأدنى يجب أن يكون 1 على الأقل', 'error'); return; }
     const slug = form.slug.trim() || slugify(form.name);
     if (!slug) { show('يرجى إدخال رابط العرض', 'error'); return; }
+
+    const bookList = parseBookList(form.book_list_text);
+
     const payload = {
       name: form.name.trim(),
       slug,
@@ -128,6 +85,8 @@ export function AdminOffers() {
       start_at: form.start_at ? new Date(form.start_at).toISOString() : null,
       end_at: form.end_at ? new Date(form.end_at).toISOString() : null,
       status: form.status,
+      display_order: Number(form.display_order),
+      book_list: bookList,
     };
     if (editingId) {
       const { error } = await supabase.from('offers').update(payload).eq('id', editingId);
@@ -154,13 +113,15 @@ export function AdminOffers() {
       start_at: offer.start_at ? offer.start_at.slice(0, 16) : '',
       end_at: offer.end_at ? offer.end_at.slice(0, 16) : '',
       status: offer.status,
+      display_order: offer.display_order,
+      book_list_text: (offer.book_list ?? []).join('\n'),
     });
     setEditingId(offer.id);
     setShowForm(true);
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذا العرض؟ لن يتم حذف الكتب نفسها.')) return;
+    if (!confirm('هل أنت متأكد من حذف هذا العرض؟')) return;
     const { error } = await supabase.from('offers').delete().eq('id', id);
     if (error) { show('فشل الحذف', 'error'); return; }
     show('تم حذف العرض', 'success');
@@ -172,6 +133,20 @@ export function AdminOffers() {
     const { error } = await supabase.from('offers').update({ status: next }).eq('id', offer.id);
     if (error) { show('فشل تحديث الحالة', 'error'); return; }
     show(next === 'active' ? 'تم تفعيل العرض' : 'تم إيقاف العرض', 'success');
+    fetchOffers();
+  };
+
+  const moveOrder = async (offer: Offer, direction: 'up' | 'down') => {
+    const sorted = [...offers].sort((a, b) => a.display_order - b.display_order);
+    const idx = sorted.findIndex((o) => o.id === offer.id);
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sorted.length) return;
+    const a = sorted[idx];
+    const b = sorted[swapIdx];
+    await Promise.all([
+      supabase.from('offers').update({ display_order: b.display_order }).eq('id', a.id),
+      supabase.from('offers').update({ display_order: a.display_order }).eq('id', b.id),
+    ]);
     fetchOffers();
   };
 
@@ -187,11 +162,7 @@ export function AdminOffers() {
   };
 
   const filtered = offers.filter((o) => o.name.toLowerCase().includes(search.toLowerCase()) || o.slug.toLowerCase().includes(search.toLowerCase()));
-
-  if (managingOfferId) {
-    const offer = offers.find((o) => o.id === managingOfferId);
-    return <AdminOfferBooks offerId={managingOfferId} offer={offer} onBack={() => navigate('/admin/offers')} />;
-  }
+  const previewBooks = parseBookList(form.book_list_text);
 
   return (
     <div className="space-y-4">
@@ -213,10 +184,13 @@ export function AdminOffers() {
             <h3 className="font-bold text-ink-900">{editingId ? 'تعديل عرض' : 'عرض جديد'}</h3>
             <button type="button" onClick={resetForm} className="text-ink-400 hover:text-ink-600"><X size={20} /></button>
           </div>
+
+          {/* Offer Information */}
+          <h4 className="mb-3 text-sm font-bold text-primary-700">معلومات العرض</h4>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="sm:col-span-2">
               <label className="label">اسم العرض *</label>
-              <input value={form.name} onChange={(e) => { setForm({ ...form, name: e.target.value, slug: editingId ? form.slug : slugify(e.target.value) }); }} className="input" placeholder="كتب بـ 60 ج.م" />
+              <input value={form.name} onChange={(e) => { setForm({ ...form, name: e.target.value, slug: editingId ? form.slug : slugify(e.target.value) }); }} className="input" placeholder="عرض الكتب بـ 60 جنيه" />
             </div>
             <div>
               <label className="label">رابط العرض (slug) *</label>
@@ -233,6 +207,10 @@ export function AdminOffers() {
             <div>
               <label className="label">الحد الأقصى (اختياري)</label>
               <input type="number" value={form.max_books} onChange={(e) => setForm({ ...form, max_books: e.target.value ? parseInt(e.target.value) : '' })} className="input" min="1" />
+            </div>
+            <div>
+              <label className="label">ترتيب العرض</label>
+              <input type="number" value={form.display_order} onChange={(e) => setForm({ ...form, display_order: parseInt(e.target.value) || 0 })} className="input" />
             </div>
             <div>
               <label className="label">تاريخ البداية (اختياري)</label>
@@ -258,6 +236,36 @@ export function AdminOffers() {
               <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="input min-h-24" placeholder="اختر كتبك المفضلة من قائمة العرض..." />
             </div>
           </div>
+
+          {/* Manual Book List */}
+          <h4 className="mb-3 mt-6 text-sm font-bold text-primary-700">قائمة الكتب (يدوياً)</h4>
+          <p className="mb-2 text-xs text-ink-500">أدخل اسم كتاب واحد في كل سطر. سيتم حفظ الترتيب كما هو وحذف الأسطر الفارغة والمكررة تلقائياً.</p>
+          <textarea
+            value={form.book_list_text}
+            onChange={(e) => setForm({ ...form, book_list_text: e.target.value })}
+            className="input min-h-48 font-mono text-sm"
+            placeholder={"أنت أيضا صحابيه\nجلسات نفسيه\nرسائل من عمر\nدليل جدتي\n..."}
+          />
+
+          {/* Preview */}
+          {previewBooks.length > 0 && (
+            <div className="mt-3 rounded-xl border border-ink-100 bg-ink-50/50 p-4">
+              <div className="mb-2 flex items-center gap-2 text-sm font-bold text-ink-700">
+                <ListChecks size={16} /> معاينة القائمة: {previewBooks.length} كتاب
+              </div>
+              <div className="max-h-48 overflow-y-auto">
+                <ol className="space-y-1 text-sm text-ink-600">
+                  {previewBooks.map((name, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="font-bold text-primary-600">{i + 1}.</span>
+                      <span>{name}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </div>
+          )}
+
           <div className="mt-4 flex gap-2">
             <button type="submit" className="btn-primary">{editingId ? 'تحديث' : 'إنشاء'}</button>
             <button type="button" onClick={resetForm} className="btn-ghost">إلغاء</button>
@@ -279,10 +287,10 @@ export function AdminOffers() {
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
-          {filtered.map((offer) => {
-            const a = analytics[offer.id];
+          {filtered.map((offer, i) => {
             const isExpired = offer.end_at ? new Date(offer.end_at) < new Date() : false;
             const effectiveStatus = isExpired ? 'expired' : offer.status;
+            const bookCount = (offer.book_list ?? []).length;
             return (
               <div key={offer.id} className="card overflow-hidden">
                 <div className="flex gap-4 p-4">
@@ -301,35 +309,23 @@ export function AdminOffers() {
                       <StatusBadge status={effectiveStatus} />
                     </div>
                     <p className="mt-1 text-sm font-bold text-primary-700">{formatPrice(offer.price_per_book)} / كتاب</p>
-                    <p className="text-xs text-ink-500">الحد الأدنى: {offer.min_books} كتب{offer.max_books ? ` • الحد الأقصى: ${offer.max_books}` : ' • بلا حد أقصى'}</p>
+                    <p className="text-xs text-ink-500">الحد الأدنى: {offer.min_books} كتب{offer.max_books ? ` • الحد الأقصى: ${offer.max_books}` : ''}</p>
+                    <p className="text-xs text-ink-500">{bookCount} كتاب في القائمة • ترتيب: {offer.display_order}</p>
                     {offer.start_at && <p className="text-xs text-ink-400">يبدأ: {formatDate(offer.start_at)}</p>}
                     {offer.end_at && <p className="text-xs text-ink-400">ينتهي: {formatDate(offer.end_at)}</p>}
                   </div>
                 </div>
-                {a && (
-                  <div className="grid grid-cols-3 border-t border-ink-100 bg-ink-50/50 text-center text-xs">
-                    <div className="border-l border-ink-100 p-2">
-                      <p className="font-bold text-ink-900">{a.orders}</p>
-                      <p className="text-ink-500">طلبات</p>
-                    </div>
-                    <div className="border-l border-ink-100 p-2">
-                      <p className="font-bold text-ink-900">{a.books_sold}</p>
-                      <p className="text-ink-500">كتب مبيعة</p>
-                    </div>
-                    <div className="p-2">
-                      <p className="font-bold text-ink-900">{formatPrice(a.revenue)}</p>
-                      <p className="text-ink-500">الإيرادات</p>
-                    </div>
-                  </div>
-                )}
                 <div className="flex flex-wrap gap-2 border-t border-ink-100 p-3">
-                  <button onClick={() => navigate(`/admin/offers/manage/${offer.id}`)} className="btn-outline text-xs">
-                    <BookIcon /> إدارة الكتب
+                  <button onClick={() => moveOrder(offer, 'up')} disabled={i === 0} className="btn-outline text-xs disabled:opacity-30">
+                    <ArrowUp size={14} /> أعلى
+                  </button>
+                  <button onClick={() => moveOrder(offer, 'down')} disabled={i === filtered.length - 1} className="btn-outline text-xs disabled:opacity-30">
+                    <ArrowDown size={14} /> أسفل
                   </button>
                   <button onClick={() => handleEdit(offer)} className="btn-outline text-xs">
                     <Pencil size={14} /> تعديل
                   </button>
-                  <button onClick={() => navigate(`/offers/${offer.slug}`)} className="btn-outline text-xs">
+                  <button onClick={() => window.location.hash = `/offers/${offer.slug}`} className="btn-outline text-xs">
                     <ExternalLink size={14} /> معاينة
                   </button>
                   <button onClick={() => toggleStatus(offer)} className="btn-outline text-xs">
@@ -353,10 +349,6 @@ export function AdminOffers() {
   );
 }
 
-function BookIcon() {
-  return <span className="text-sm">📚</span>;
-}
-
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     active: 'bg-primary-100 text-primary-700',
@@ -376,19 +368,16 @@ function StatusBadge({ status }: { status: string }) {
 function GuideModal({ onClose }: { onClose: () => void }) {
   const steps = [
     'اضغط "إنشاء عرض جديد".',
-    'أدخل اسم العرض، مثال: كتب بـ 60 ج.م.',
+    'أدخل اسم العرض، مثال: عرض الكتب بـ 60 جنيه.',
     'حدد سعر الكتاب، مثال: 60.',
     'حدد الحد الأدنى للكتب، مثال: 5.',
+    'في حقل "قائمة الكتب"، الصق أسماء الكتب (كتاب واحد في كل سطر).',
+    'راجع المعاينة: عدد الكتب والترتيب.',
+    'ارفع صورة غلاف العرض.',
+    'اكتب وصفاً للعرض.',
+    'اضبط الحالة على "نشط".',
     'اضغط "إنشاء".',
-    'افتح "إدارة الكتب".',
-    'اختر طريقة الإضافة: اختيار يدوي أو استيراد بالجملة.',
-    'للاستيراد بالجملة، ارفع ملف CSV/TXT أو الصق أسماء الكتب.',
-    'اضغط "معاينة".',
-    'راجع: المطابقة، غير موجود، المكرر، المضاف سابقاً.',
-    'اضغط "استيراد المطابق".',
-    'راجع كتب العرض.',
-    'فعّل العرض.',
-    'انسخ الرابط العام واستخدمه على الموقع/السوشيال ميديا.',
+    'سيظهر العرض تلقائياً على الصفحة الرئيسية للعملاء.',
   ];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>

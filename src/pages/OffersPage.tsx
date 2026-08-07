@@ -3,15 +3,24 @@ import { supabase } from '@/lib/supabase';
 import { Link } from '@/components/Link';
 import type { Offer } from '@/lib/types';
 import { formatPrice } from '@/lib/constants';
-import { Tag, ArrowLeft } from 'lucide-react';
+import { useSeo } from '@/lib/seo';
+import { useSettings } from '@/lib/settings';
+import { Tag, ArrowLeft, ChevronLeft } from 'lucide-react';
 
 export function OffersPage() {
+  const { settings } = useSettings();
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
 
+  useSeo({
+    title: `العروض الخاصة | ${settings.site_name || 'مكتبة نون'}`,
+    description: 'تصفح أحدث العروض والخصومات على الكتب والروايات. اختر كتبك المفضلة بأسعار مميزة واطلب عبر واتساب.',
+    canonicalPath: '/offers',
+  });
+
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('offers').select('*').eq('status', 'active').order('created_at', { ascending: false });
+      const { data } = await supabase.from('offers').select('*').eq('status', 'active').order('display_order', { ascending: true });
       setOffers((data as Offer[]) ?? []);
       setLoading(false);
     })();
@@ -30,6 +39,11 @@ export function OffersPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
+      <nav className="mb-4 flex items-center gap-1 text-sm text-ink-500">
+        <Link to="/" className="hover:text-primary-600">الرئيسية</Link>
+        <ChevronLeft size={14} />
+        <span className="font-semibold text-ink-700">العروض</span>
+      </nav>
       <h1 className="section-title mb-6">العروض الخاصة</h1>
       {offers.length === 0 ? (
         <div className="card p-12 text-center">

@@ -4,16 +4,18 @@ import { BookCard } from '@/components/BookCard';
 import { supabase } from '@/lib/supabase';
 import { useCart } from '@/lib/cart';
 import { useAuth } from '@/lib/auth';
-import { SEO } from '@/components/SEO';
 import { useToast } from '@/lib/toast';
 import type { Book, Category } from '@/lib/types';
 import { getEffectivePrice, getDiscountPercent, formatPrice } from '@/lib/constants';
-import { ShoppingCart, Heart, Minus, Plus, Star, Truck, ShieldCheck, BookOpen, ArrowRight } from 'lucide-react';
+import { useSeo, SITE_ORIGIN } from '@/lib/seo';
+import { useSettings } from '@/lib/settings';
+import { ShoppingCart, Heart, Minus, Plus, Star, Truck, ShieldCheck, BookOpen, ArrowRight, ChevronLeft } from 'lucide-react';
 
 export function BookDetailPage({ id }: { id: string }) {
   const { profile } = useAuth();
   const { addToCart } = useCart();
   const { show } = useToast();
+  const { settings } = useSettings();
   const [book, setBook] = useState<Book | null>(null);
   const [category, setCategory] = useState<Category | null>(null);
   const [related, setRelated] = useState<Book[]>([]);
@@ -79,6 +81,31 @@ export function BookDetailPage({ id }: { id: string }) {
       show('تمت الإضافة إلى المفضلة', 'success');
     }
   };
+
+  const siteName = settings.site_name || 'مكتبة نون';
+  useSeo({
+    title: book ? `${book.title} | ${siteName}` : 'كتاب | مكتبة نون',
+    description: book?.description ?? (book ? `اقترب ${book.title}${book.author ? ` - ${book.author}` : ''} متوفر الآن في مكتبة نون.` : undefined),
+    image: book?.cover_url ?? undefined,
+    type: 'product',
+    canonicalPath: book ? `/book/${book.id}` : undefined,
+    jsonLd: book ? {
+      '@context': 'https://schema.org',
+      '@type': 'Book',
+      name: book.title,
+      author: book.author ? { '@type': 'Person', name: book.author } : undefined,
+      publisher: book.publisher ? { '@type': 'Organization', name: book.publisher } : undefined,
+      image: book.cover_url ?? undefined,
+      description: book.description ?? undefined,
+      offers: {
+        '@type': 'Offer',
+        price: getEffectivePrice(book),
+        'priceCurrency': 'EGP',
+        availability: book.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+        url: `${SITE_ORIGIN}/#/book/${book.id}`,
+      },
+    } : undefined,
+  });
 
   if (loading) {
     return (

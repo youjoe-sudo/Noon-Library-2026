@@ -2,34 +2,65 @@ import { useEffect, useState } from 'react';
 import { Link } from '@/components/Link';
 import { BookCard, BookCardSkeleton } from '@/components/BookCard';
 import { supabase } from '@/lib/supabase';
-import type { Book, Category } from '@/lib/types';
+import type { Book, Category, Offer } from '@/lib/types';
 import { useHashRoute } from '@/lib/router';
-import { Search, TrendingUp, Star, Sparkles, Megaphone, ArrowLeft, Truck, ShieldCheck, Headphones } from 'lucide-react';
+import { useSettings } from '@/lib/settings';
+import { useSeo, SITE_ORIGIN } from '@/lib/seo';
+import { formatPrice } from '@/lib/constants';
+import { Search, TrendingUp, Star, Sparkles, Megaphone, ArrowLeft, Truck, ShieldCheck, Headphones, Tag, BookOpen, Flame } from 'lucide-react';
 
 export function HomePage() {
   const { navigate } = useHashRoute();
+  const { settings } = useSettings();
   const [categories, setCategories] = useState<Category[]>([]);
   const [bestsellers, setBestsellers] = useState<Book[]>([]);
   const [newReleases, setNewReleases] = useState<Book[]>([]);
   const [recommended, setRecommended] = useState<Book[]>([]);
   const [highCommission, setHighCommission] = useState<Book[]>([]);
+  const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const siteName = settings.site_name || 'مكتبة نون';
+  useSeo({
+    title: `${siteName} | كتب وروايات وكتب متنوعة`,
+    description: `اكتشف الكتب والروايات المتنوعة من ${siteName}، وتصفح أحدث الإصدارات والعروض المميزة واختر كتبك المفضلة بسهولة. شحن لكل محافظات مصر.`,
+    canonicalPath: '/',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: siteName,
+      url: SITE_ORIGIN,
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: `${SITE_ORIGIN}/#/search?q={search_term_string}`,
+        'query-input': 'required name=search_term_string',
+      },
+    },
+  });
+
   useEffect(() => {
     (async () => {
-      const [cats, best, newR, rec, highC] = await Promise.all([
+      const [cats, best, newR, rec, highC, activeOffers] = await Promise.all([
         supabase.from('categories').select('*').eq('is_hidden', false).order('sort_order'),
         supabase.from('books').select('*, category:categories(*)').eq('is_bestseller', true).limit(10),
         supabase.from('books').select('*, category:categories(*)').eq('is_new_release', true).order('created_at', { ascending: false }).limit(10),
         supabase.from('books').select('*, category:categories(*)').eq('is_recommended', true).limit(10),
         supabase.from('books').select('*, category:categories(*)').eq('is_high_commission', true).limit(10),
+        supabase.from('offers').select('*').eq('status', 'active').order('display_order', { ascending: true }),
       ]);
       setCategories((cats.data as Category[]) ?? []);
       setBestsellers((best.data as Book[]) ?? []);
       setNewReleases((newR.data as Book[]) ?? []);
       setRecommended((rec.data as Book[]) ?? []);
       setHighCommission((highC.data as Book[]) ?? []);
+      const now = new Date();
+      const valid = ((activeOffers.data as Offer[]) ?? []).filter((o) => {
+        if (o.end_at && new Date(o.end_at) < now) return false;
+        if (o.start_at && new Date(o.start_at) > now) return false;
+        return true;
+      });
+      setOffers(valid);
       setLoading(false);
     })();
   }, []);
@@ -87,7 +118,12 @@ export function HomePage() {
 
       {/* Categories */}
       <section className="mx-auto max-w-7xl px-4 py-12">
-        <h2 className="section-title mb-6">تصفح حسب التصنيف</h2>
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className="section-title">تصفح حسب التصنيف</h2>
+          <Link to="/books" className="btn-outline text-sm">
+            <BookOpen size={16} /> عرض كل الكتب
+          </Link>
+        </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
           {categories.map((cat) => (
             <Link
@@ -103,6 +139,58 @@ export function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* Special Offers */}
+      {offers.length > 0 && (
+        <section className="mx-auto max-w-7xl px-4 py-8">
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 section-title">
+              <span className="text-accent-500"><Flame size={22} /></span>
+              عروض خاصة
+            </h2>
+            <Link to="/offers" className="text-sm font-semibold text-primary-600 hover:text-primary-700">
+              عرض الكل <ArrowLeft size={14} className="inline" />
+            </Link>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {offers.map((offer) => (
+              <Link
+                key={offer.id}
+                to={`/offers/${offer.slug}`}
+                className="group relative overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-soft transition-all hover:shadow-card"
+              >
+                <div className="relative h-40 overflow-hidden bg-gradient-to-br from-primary-700 to-primary-900">
+                  {offer.cover_image ? (
+                    <img src={offer.cover_image} alt={`عرض ${offer.name}`} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
+                  ) : (
+                    <div className="flex h-full items-center justify-center">
+                      <Tag size={40} className="text-white/30" />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                  <span className="absolute right-3 top-3 rounded-full bg-accent-500 px-3 py-1 text-xs font-bold text-white shadow">
+                    عرض خاص
+                  </span>
+                </div>
+                <div className="p-4">
+                  <h3 className="font-bold text-ink-900 group-hover:text-primary-700">{offer.name}</h3>
+                  {offer.description && <p className="mt-1 line-clamp-2 text-sm text-ink-500">{offer.description}</p>}
+                  <div className="mt-3 flex items-center justify-between">
+                    <div>
+                      <span className="text-lg font-bold text-primary-700">{formatPrice(offer.price_per_book)}</span>
+                      <span className="text-xs text-ink-500"> / كتاب</span>
+                    </div>
+                    <span className="text-xs text-ink-500">الحد الأدنى: {offer.min_books} كتب</span>
+                  </div>
+                  <div className="mt-3 flex items-center justify-center rounded-lg bg-primary-50 py-2 text-sm font-semibold text-primary-700 transition-colors group-hover:bg-primary-600 group-hover:text-white">
+                    عرض التفاصيل <ArrowLeft size={14} className="ml-1" />
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Bestsellers */}
       <BookSection title="الأكثر مبيعاً" icon={<TrendingUp size={20} />} books={bestsellers} loading={loading} />

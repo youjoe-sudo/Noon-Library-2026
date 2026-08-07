@@ -380,35 +380,8 @@ export interface Offer {
   start_at: string | null;
   end_at: string | null;
   status: OfferStatus;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface OfferBook {
-  id: string;
-  offer_id: string;
-  book_id: string;
+  book_list: string[];
   display_order: number;
   created_at: string;
-  book?: Book | null;
-}
-
-export interface OfferMatchResult {
-  matched: { input: string; book_id: string; title: string }[];
-  not_found: string[];
-  ambiguous: { input: string; candidates: { book_id: string; title: string }[] }[];
-  duplicate_input_count: number;
-}
-
-export interface OfferValidationResult {
-  valid: boolean;
-  error?: string;
-  offer_id?: string;
-  offer_name?: string;
-  price_per_book?: number;
-  book_ids?: string[];
-  count?: number;
-  subtotal?: number;
-  invalid_books?: string[];
-  out_of_stock?: string[];
+  updated_at: string;
 }

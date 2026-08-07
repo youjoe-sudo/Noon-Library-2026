@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /cart
+Disallow: /checkout
+Disallow: /profile
+Disallow: /orders
+Disallow: /order/
+Disallow: /wishlist
+Disallow: /addresses
+Disallow: /notifications
+Disallow: /affiliate
+Disallow: /affiliate-register
+Disallow: /tickets
+Disallow: /ticket/
+Disallow: /login
+Disallow: /signup
+
+# Hash-based router - search/filter pages
+Disallow: /search

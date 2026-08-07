@@ -235,6 +235,12 @@ export function Header() {
           <Link to="/" className="rounded-lg px-3 py-1.5 text-sm font-semibold text-ink-700 hover:bg-primary-50 hover:text-primary-700">
             الرئيسية
           </Link>
+          <Link to="/books" className="rounded-lg px-3 py-1.5 text-sm font-semibold text-ink-700 hover:bg-primary-50 hover:text-primary-700">
+            الكتب
+          </Link>
+          <Link to="/offers" className="rounded-lg px-3 py-1.5 text-sm font-semibold text-ink-700 hover:bg-primary-50 hover:text-primary-700">
+            العروض
+          </Link>
           {categories.map((cat) => (
             <Link
               key={cat.id}
