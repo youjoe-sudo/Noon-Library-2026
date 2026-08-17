@@ -31,6 +31,7 @@ export function OfferPage({ slug }: Props) {
   useEffect(() => {
     (async () => {
       setLoading(true);
+      const decodedSlug = decodeURIComponent(slug);
       const { data: offerData } = await supabase.from('offers').select('*').eq('slug', slug).maybeSingle();
       if (!offerData) { setNotFound(true); setLoading(false); return; }
       setOffer(offerData as Offer);
