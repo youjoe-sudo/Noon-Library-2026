@@ -6,7 +6,7 @@ import type { Offer } from '@/lib/types';
 import { formatPrice } from '@/lib/constants';
 import { Link } from '@/components/Link';
 import { useSeo } from '@/lib/seo';
-import { Search, Check, Tag, AlertCircle, ArrowLeft, MessageCircle, BookOpen, ChevronLeft } from 'lucide-react';
+import { Search, Check, Tag, AlertCircle, ArrowLeft, MessageCircle, ChevronLeft } from 'lucide-react';
 
 interface Props {
   slug: string;
@@ -31,9 +31,33 @@ export function OfferPage({ slug }: Props) {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const decodedSlug = decodeURIComponent(slug);
-      const { data: offerData } = await supabase.from('offers').select('*').eq('slug', slug).maybeSingle();
-      if (!offerData) { setNotFound(true); setLoading(false); return; }
+      setNotFound(false);
+
+      // 1. فك تشفير الـ slug لمعالجة الحروف العربية
+      let decodedSlug = slug;
+      try {
+        decodedSlug = decodeURIComponent(slug);
+      } catch (e) {
+        console.error('Failed to decode slug', e);
+      }
+
+      // 2. الاستعلام عن العرض باستخدام الـ decodedSlug والـ slug الأصلي لضمان التوافق
+      const { data: offerData, error } = await supabase
+        .from('offers')
+        .select('*')
+        .or(`slug.eq.${decodedSlug},slug.eq.${slug},id.eq.${slug}`)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Supabase fetch error:', error);
+      }
+
+      if (!offerData) {
+        setNotFound(true);
+        setLoading(false);
+        return;
+      }
+
       setOffer(offerData as Offer);
       setLoading(false);
     })();
