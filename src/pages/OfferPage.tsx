@@ -28,42 +28,43 @@ export function OfferPage({ slug }: Props) {
     type: 'article',
   });
 
-  useEffect(() => {
-    (async () => {
-      console.log('Original slug prop:', slug);
-    console.log('Decoded slug:', decodeURIComponent(slug));
-      setLoading(true);
-      setNotFound(false);
+useEffect(() => {
+  (async () => {
+    setLoading(true);
+    setNotFound(false);
 
-      // 1. فك تشفير الـ slug لمعالجة الحروف العربية
-      let decodedSlug = slug;
-      try {
-        decodedSlug = decodeURIComponent(slug);
-      } catch (e) {
-        console.error('Failed to decode slug', e);
-      }
+    // 1. فك تشفير الـ slug
+    let decodedSlug = slug;
+    try {
+      decodedSlug = decodeURIComponent(slug);
+    } catch (e) {
+      console.error('Failed to decode slug:', e);
+    }
 
-      // 2. الاستعلام عن العرض باستخدام الـ decodedSlug والـ slug الأصلي لضمان التوافق
-      const { data: offerData, error } = await supabase
-        .from('offers')
-        .select('*')
-        .or(`slug.eq.${decodedSlug},slug.eq.${slug},id.eq.${slug}`)
-        .maybeSingle();
+    // 2. الاستعلام عبر الـ slug فقط (سواء المفكوك أو الأصلي)
+    const { data: offerData, error } = await supabase
+      .from('offers')
+      .select('*')
+      .or(`slug.eq.${decodedSlug},slug.eq.${slug}`)
+      .maybeSingle();
 
-      if (error) {
-        console.error('Supabase fetch error:', error);
-      }
-
-      if (!offerData) {
-        setNotFound(true);
-        setLoading(false);
-        return;
-      }
-
-      setOffer(offerData as Offer);
+    if (error) {
+      console.error('Supabase fetch error:', error);
+      setNotFound(true);
       setLoading(false);
-    })();
-  }, [slug]);
+      return;
+    }
+
+    if (!offerData) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
+
+    setOffer(offerData as Offer);
+    setLoading(false);
+  })();
+}, [slug]);
 
   const bookList = offer?.book_list ?? [];
 
