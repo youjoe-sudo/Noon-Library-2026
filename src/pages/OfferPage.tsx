@@ -30,6 +30,8 @@ export function OfferPage({ slug }: Props) {
 
   useEffect(() => {
     (async () => {
+      console.log('Original slug prop:', slug);
+    console.log('Decoded slug:', decodeURIComponent(slug));
       setLoading(true);
       setNotFound(false);
 
